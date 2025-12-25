@@ -1,0 +1,10 @@
+use("Book");
+
+db.Category.insertMany([
+  {
+    _id: ObjectId(), // ใช้ ObjectId() แทน category_id 1
+    name: "Mystery",
+  },
+
+]);
+

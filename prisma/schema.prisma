@@ -1,0 +1,103 @@
+// ส่วนหัวที่จำเป็น
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// ------------------------------------
+// โมเดลสำหรับร้านขายอุปกรณ์ไอที (Update)
+// ------------------------------------
+
+model User {
+  user_id    String   @id @default(auto()) @map("_id") @db.ObjectId
+  username   String
+  email      String   @unique
+  password   String
+  picture    String?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  
+  cartItems  OrderItem[]
+  reviews    Review[]
+}
+
+model Product {
+  product_id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  product_name        String   // แก้ให้ตรงกับ Controller (เดิม name)
+  brand               String?
+  price               Float
+  stock               Int      @default(0)
+  description         String?
+  product_image       String?  // แก้ให้ตรงกับ Controller (เดิม image_url)
+  specifications      String?  // แก้ให้ตรงกับ Controller (เดิม specs)
+  
+  added_to_list_count Int      @default(0) // แก้ให้ตรงกับ Controller (เดิม added_to_cart_count)
+  average_rating      Float    @default(0)
+  review_count        Int      @default(0)
+  
+  categories          ProductCategory[]
+  orderItems          OrderItem[]
+  reviews             Review[]
+}
+
+// สถานะของ OrderItem (ถ้าอนาคตทำระบบตะกร้า)
+enum OrderStatus {
+  IN_CART
+  PENDING
+  PAID
+  SHIPPED
+  COMPLETED
+}
+
+model OrderItem {
+  order_item_id String      @id @default(auto()) @map("_id") @db.ObjectId
+  user_id       String      @db.ObjectId
+  product_id    String      @db.ObjectId
+  
+  quantity      Int         @default(1)
+  status        OrderStatus @default(IN_CART)
+  
+  add_date      DateTime    @default(now())
+  update_date   DateTime    @updatedAt
+
+  user    User    @relation(fields: [user_id], references: [user_id])
+  product Product @relation(fields: [product_id], references: [product_id])
+
+  @@unique([user_id, product_id])
+}
+
+// ตารางเชื่อม Many-to-Many ระหว่าง Product และ Category
+model ProductCategory {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  product_id  String   @db.ObjectId
+  category_id String   @db.ObjectId
+
+  product  Product  @relation(fields: [product_id], references: [product_id])
+  category Category @relation(fields: [category_id], references: [category_id])
+
+  @@unique([product_id, category_id])
+}
+
+model Category {
+  category_id String            @id @default(auto()) @map("_id") @db.ObjectId
+  name        String
+  products    ProductCategory[]
+}
+
+model Review {
+  review_id   String   @id @default(auto()) @map("_id") @db.ObjectId
+  user_id     String   @db.ObjectId
+  product_id  String   @db.ObjectId
+  rating      Int      @default(0)
+  comment     String?
+  review_date DateTime @default(now())
+
+  user    User    @relation(fields: [user_id], references: [user_id])
+  product Product @relation(fields: [product_id], references: [product_id])
+
+  @@unique([user_id, product_id])
+}
