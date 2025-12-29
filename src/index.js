@@ -15,6 +15,7 @@ const categoriesRoute = require('./routes/category.route');
 const registersRoute = require('./routes/register.route');
 const reviewRoute = require('./routes/review.route');
 const productCategoryRoute = require('./routes/bookCategory.route'); // ใช้ไฟล์เดิมเชื่อมโยงหมวดหมู่
+const orderRoute = require('./routes/order.route');
 
 // --- Static Files ---
 app.use('/images', express.static('images'));
@@ -40,6 +41,7 @@ app.use("/registers", registersRoute);
 app.use("/product-categories", productCategoryRoute);
 app.use("/reviews", reviewRoute);
 
+app.use("/orders", orderRoute);
 app.listen(port, () => {
     console.log("App started at port: " + port);
 });
