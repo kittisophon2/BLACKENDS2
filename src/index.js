@@ -15,6 +15,7 @@ const categoriesRoute = require('./routes/category.route');
 const registersRoute = require('./routes/register.route');
 const reviewRoute = require('./routes/review.route');
 const orderRoute = require('./routes/order.route');
+const cartRoute = require('./routes/cart.route'); // 1. Import ไฟล์
 
 // ❌ ลบบรรทัด require bookCategory ออกไปเลยครับ เพราะเราไม่มีไฟล์นี้แล้ว
 // const productCategoryRoute = require('./routes/bookCategory.route'); 
@@ -46,7 +47,7 @@ app.use("/registers", registersRoute);
 
 app.use("/reviews", reviewRoute);
 app.use("/orders", orderRoute);
-
+app.use("/carts", cartRoute); // 2. กำหนด URL
 app.listen(port, () => {
     console.log("App started at port: " + port);
 });
