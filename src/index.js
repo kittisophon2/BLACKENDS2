@@ -14,8 +14,10 @@ const productRoute = require('./routes/product.route');
 const categoriesRoute = require('./routes/category.route');
 const registersRoute = require('./routes/register.route');
 const reviewRoute = require('./routes/review.route');
-const productCategoryRoute = require('./routes/bookCategory.route'); // ใช้ไฟล์เดิมเชื่อมโยงหมวดหมู่
 const orderRoute = require('./routes/order.route');
+
+// ❌ ลบบรรทัด require bookCategory ออกไปเลยครับ เพราะเราไม่มีไฟล์นี้แล้ว
+// const productCategoryRoute = require('./routes/bookCategory.route'); 
 
 // --- Static Files ---
 app.use('/images', express.static('images'));
@@ -38,10 +40,13 @@ app.get("/", (req, res) => {
 app.use("/products", productRoute); 
 app.use("/categories", categoriesRoute);
 app.use("/registers", registersRoute);
-app.use("/product-categories", productCategoryRoute);
-app.use("/reviews", reviewRoute);
 
+// ❌ ลบบรรทัด app.use นี้ออกด้วยครับ (นี่คือตัวต้นเหตุที่ทำให้ฟ้อง ReferenceError ก่อนหน้านี้)
+// app.use("/product-categories", productCategoryRoute); 
+
+app.use("/reviews", reviewRoute);
 app.use("/orders", orderRoute);
+
 app.listen(port, () => {
     console.log("App started at port: " + port);
 });

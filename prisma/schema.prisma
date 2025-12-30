@@ -17,12 +17,12 @@ model User {
   username   String
   email      String   @unique
   password   String
-  picture    String?
+  picture    String?  // ตรงกับตัวแปร picture ใน register.controller.js
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
   
-  cartItems  OrderItem[] // รายการสินค้า (รวมทั้งในตะกร้าและที่สั่งแล้ว)
-  orders     Order[]     // ประวัติการสั่งซื้อ (เพิ่มใหม่)
+  cartItems  OrderItem[] 
+  orders     Order[]     // เชื่อมกับระบบ Order
   reviews    Review[]
 }
 
