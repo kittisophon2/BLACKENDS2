@@ -1,29 +1,35 @@
 const express = require('express');
-const router = express.Router(); // นิยมใช้ชื่อ router แทน app ในไฟล์แยก
-const controller = require('../controllers/product.controller'); // เปลี่ยนเป็น product controller
-const authMiddleware = require('../middlewares/auth.middleware');
+const router = express.Router();
+const controller = require('../controllers/product.controller');
+// เรียกใช้ Middleware สำหรับตรวจสอบสิทธิ์
+const { verifyToken, isAdmin } = require('../middlewares/auth.middleware');
 
-// Define routes
-
-// CRUD พื้นฐาน
+// --- 1. เส้นทางสาธารณะ (ใครก็เข้าดูได้) ---
 router.get("/", controller.get);
 router.get("/:id", controller.getById);
-router.post("/", controller.create);
-router.put("/:id", controller.update);
-router.delete("/:id", controller.delete);
 
-// Search (ต้องระวัง: ตรวจสอบว่าใน product.controller มีฟังก์ชัน searchProducts และรับค่า params ตามนี้จริงหรือไม่)
-// ผมเปลี่ยนตัวอย่างเป็นค้นหาด้วย name และ category แทน title และ author
-router.get('/search/:name/:category', controller.searchProducts); 
+// Search: ใช้แบบ Query Params (เช่น /search?product_name=...&brand=...) จะยืดหยุ่นกว่า
+router.get('/search', controller.searchProducts); 
 
-// Top Products (เปลี่ยนจาก Books เป็น Products)
+// Top Products
 router.get('/top-products/top', controller.getTopProducts); 
 router.get('/top-products/toprating', controller.getTopRatingProducts);
 
-// เส้นทางใหม่สำหรับเพิ่มค่า added_to_list_count (เช่น จำนวนคนกด wishlist)
-router.put('/increment-added-to-list/:id', authMiddleware.authenticate, controller.incrementAddedToListCount);
+// --- 2. เส้นทางสำหรับ User ทั่วไป (ต้อง Login) ---
+// เพิ่มสินค้าลง Wishlist / Favorite
+router.put('/increment-added-to-list/:id', verifyToken, controller.incrementAddedToListCount);
 
-// เส้นทางใหม่สำหรับเพิ่มรีวิว
-router.post('/add-review', authMiddleware.authenticate, controller.addReview);
+// เพิ่มรีวิว (User ต้อง Login ถึงจะรีวิวได้)
+router.post('/add-review', verifyToken, controller.addReview);
+
+// --- 3. เส้นทางสำหรับ Admin เท่านั้น (ต้อง Login + เป็น Admin) ---
+// เพิ่มสินค้า
+router.post("/", [verifyToken, isAdmin], controller.create);
+
+// แก้ไขสินค้า
+router.put("/:id", [verifyToken, isAdmin], controller.update);
+
+// ลบสินค้า
+router.delete("/:id", [verifyToken, isAdmin], controller.delete);
 
 module.exports = router;

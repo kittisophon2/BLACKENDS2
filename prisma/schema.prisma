@@ -9,7 +9,7 @@ datasource db {
 }
 
 // ------------------------------------
-// โมเดลสำหรับร้านขายอุปกรณ์ไอที (Update: Order System)
+// โมเดลสำหรับร้านขายอุปกรณ์ไอที (Update: Admin Role added)
 // ------------------------------------
 
 model User {
@@ -17,12 +17,16 @@ model User {
   username   String
   email      String   @unique
   password   String
-  picture    String?  // ตรงกับตัวแปร picture ใน register.controller.js
+  picture    String?
+  
+  // ✅ เพิ่มบรรทัดนี้: เพื่อกำหนดสิทธิ์ผู้ใช้ (ค่าปกติคือ "user")
+  role       String   @default("user") 
+  
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
   
   cartItems  OrderItem[] 
-  orders     Order[]     // เชื่อมกับระบบ Order
+  orders     Order[]     
   reviews    Review[]
 }
 
@@ -52,7 +56,7 @@ enum OrderStatus {
   PAID        // ชำระเงินแล้ว/ยืนยันแล้ว
   SHIPPED     // จัดส่งแล้ว
   COMPLETED   // สำเร็จ (ลูกค้ารับของแล้ว)
-  CANCELLED   // ยกเลิก (เพิ่มใหม่)
+  CANCELLED   // ยกเลิก
 }
 
 // โมเดลใบสั่งซื้อ (Header)
@@ -77,10 +81,10 @@ model OrderItem {
   order_item_id String      @id @default(auto()) @map("_id") @db.ObjectId
   user_id       String      @db.ObjectId
   product_id    String      @db.ObjectId
-  order_id      String?     @db.ObjectId // เพิ่ม: เชื่อมกับใบสั่งซื้อ (ถ้าเป็น null คืออยู่ในตะกร้า)
+  order_id      String?     @db.ObjectId // เชื่อมกับใบสั่งซื้อ (ถ้าเป็น null คืออยู่ในตะกร้า)
   
   quantity      Int         @default(1)
-  price         Float?      // เพิ่ม: บันทึกราคา ณ ตอนที่สั่งซื้อ (เพื่อไม่ให้กระทบเมื่อราคาสินค้าเปลี่ยน)
+  price         Float?      // บันทึกราคา ณ ตอนที่สั่งซื้อ
   status        OrderStatus @default(IN_CART)
   
   add_date      DateTime    @default(now())
@@ -89,8 +93,6 @@ model OrderItem {
   user    User    @relation(fields: [user_id], references: [user_id])
   product Product @relation(fields: [product_id], references: [product_id])
   order   Order?  @relation(fields: [order_id], references: [order_id])
-
-  // ลบ @@unique([user_id, product_id]) ออกเพื่อให้ user ซื้อสินค้าเดิมซ้ำได้ในออเดอร์ใหม่
 }
 
 // ตารางเชื่อม Many-to-Many ระหว่าง Product และ Category
