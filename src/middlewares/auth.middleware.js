@@ -1,22 +1,31 @@
-const jwt = require("jsonwebtoken");
+const authService = require('../services/auth.service');
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
-// ฟังก์ชันเดิม (ตรวจสอบว่า Login หรือยัง)
+// 1. ตรวจสอบ Token (เปลี่ยนชื่อเป็น verifyToken เพื่อให้ตรงกับ Route)
 exports.verifyToken = (req, res, next) => {
-  const token = req.headers["authorization"];
-  if (!token) return res.status(403).json({ error: "No token provided" });
+  const token = req.headers.authorization?.split(' ')[1]; // ดึง token
 
-  jwt.verify(token.split(" ")[1], process.env.JWT_SECRET || "secret_key", (err, decoded) => {
-    if (err) return res.status(401).json({ error: "Unauthorized" });
-    req.userId = decoded.userId;
-    next();
-  });
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized: No token provided' });
+  }
+
+  // เรียกใช้ Service (แก้ไขปัญหา Key ไม่ตรงกัน)
+  const decoded = authService.verifyToken(token);
+  
+  if (!decoded) {
+    return res.status(401).json({ error: 'Unauthorized: Invalid token' });
+  }
+
+  // กำหนด req.userId เพื่อให้ isAdmin และ Controller อื่นๆ ใช้งานต่อได้
+  req.userId = decoded.userId; 
+  next();
 };
 
-// --- เพิ่มฟังก์ชันนี้ต่อท้าย (ตรวจสอบว่าเป็น Admin ไหม) ---
+// 2. ตรวจสอบ Admin (เพิ่มกลับเข้ามา)
 exports.isAdmin = async (req, res, next) => {
   try {
+    // เช็คใน Database ว่า user นี้ role เป็น admin ไหม
     const user = await prisma.user.findUnique({
       where: { user_id: req.userId }
     });
