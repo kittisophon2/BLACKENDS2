@@ -83,6 +83,7 @@ exports.create = async (req, res) => {
           email,
           password: hashedPassword,
           picture,
+          // role จะเป็น "user" โดยอัตโนมัติตาม default ใน schema
         },
       });
 
@@ -179,10 +180,39 @@ exports.login = async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    // Generate JWT Token
+    // Generate JWT Token (ส่ง role ไปใน token ด้วยก็ได้ถ้าต้องการ)
     const token = authService.generateToken({ userId: user.user_id });
 
     res.json({ token });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// ✅ (New Function) Update User Role [Admin Only]
+exports.updateRole = async (req, res) => {
+  const { id } = req.params;
+  const { role } = req.body;
+
+  // Validate role
+  if (!["user", "admin"].includes(role)) {
+    return res.status(400).json({ error: "Invalid role. Allowed values: 'user', 'admin'" });
+  }
+
+  try {
+    const updatedUser = await prisma.user.update({
+      where: { user_id: id },
+      data: { role: role }
+    });
+
+    res.json({ 
+      message: `User role updated to ${role} successfully`, 
+      user: {
+        user_id: updatedUser.user_id,
+        username: updatedUser.username,
+        role: updatedUser.role
+      }
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
