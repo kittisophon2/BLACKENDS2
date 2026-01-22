@@ -9,7 +9,7 @@ const path = require("path");
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, "userpictures/"); // Store files in the 'userpictures' directory
+    cb(null, "userpictures/"); 
   },
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
@@ -19,7 +19,6 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-// Fetch all users
 exports.get = async (req, res) => {
   try {
     const users = await prisma.user.findMany();
@@ -36,7 +35,6 @@ exports.get = async (req, res) => {
   }
 };
 
-// Fetch user by ID
 exports.getById = async (req, res) => {
   const { id } = req.params;
   try {
@@ -57,7 +55,6 @@ exports.getById = async (req, res) => {
   }
 };
 
-// Register a new user
 exports.create = async (req, res) => {
   upload.single("profilePicture")(req, res, async (err) => {
     if (err) return res.status(400).json({ error: err.message });
@@ -66,7 +63,6 @@ exports.create = async (req, res) => {
     const picture = req.file ? req.file.filename : null;
 
     try {
-      // Check for duplicate email or username
       const existingUser = await prisma.user.findFirst({
         where: { OR: [{ email }, { username }] },
       });
@@ -83,7 +79,6 @@ exports.create = async (req, res) => {
           email,
           password: hashedPassword,
           picture,
-          // role จะเป็น "user" โดยอัตโนมัติตาม default ใน schema
         },
       });
 
@@ -94,7 +89,6 @@ exports.create = async (req, res) => {
   });
 };
 
-// Update user
 exports.update = async (req, res) => {
   upload.single("profilePicture")(req, res, async (err) => {
     if (err) return res.status(400).json({ error: err.message });
@@ -109,7 +103,6 @@ exports.update = async (req, res) => {
         return res.status(404).json({ error: "User not found" });
       }
 
-      // Delete old picture if new picture is uploaded
       if (picture && user.picture) {
         const oldImagePath = path.join("userpictures", user.picture);
         if (fs.existsSync(oldImagePath)) {
@@ -117,7 +110,6 @@ exports.update = async (req, res) => {
         }
       }
 
-      // Hash password only if it’s updated
       let updatedPassword = user.password;
       if (password) {
         updatedPassword = await bcrypt.hash(password, 10);
@@ -140,7 +132,6 @@ exports.update = async (req, res) => {
   });
 };
 
-// Delete user
 exports.delete = async (req, res) => {
   const { id } = req.params;
 
@@ -150,7 +141,6 @@ exports.delete = async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-    // Delete picture if exists
     if (user.picture) {
       const imagePath = path.join("userpictures", user.picture);
       if (fs.existsSync(imagePath)) {
@@ -165,7 +155,7 @@ exports.delete = async (req, res) => {
   }
 };
 
-// Login user
+// --- ✅ ส่วนที่ต้องแก้คือตรงนี้ (LOGIN) ---
 exports.login = async (req, res) => {
   const { email, password } = req.body;
 
@@ -180,23 +170,38 @@ exports.login = async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    // Generate JWT Token (ส่ง role ไปใน token ด้วยก็ได้ถ้าต้องการ)
-    const token = authService.generateToken({ userId: user.user_id });
+    // 1. ใส่ Role เข้าไปใน Token
+    const token = authService.generateToken({ 
+      userId: user.user_id,
+      role: user.role,
+      username: user.username 
+    });
 
-    res.json({ token });
+    // 2. ส่งข้อมูล User กลับไปให้ Frontend
+    res.json({ 
+      token,
+      user: {
+        user_id: user.user_id,
+        username: user.username,
+        email: user.email,
+        role: user.role, // สำคัญ!
+        picture: user.picture,
+        pictureUrl: user.picture
+          ? `${req.protocol}://${req.get("host")}/userpictures/${user.picture}`
+          : null
+      }
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
-// ✅ (New Function) Update User Role [Admin Only]
 exports.updateRole = async (req, res) => {
   const { id } = req.params;
   const { role } = req.body;
 
-  // Validate role
-  if (!["user", "admin"].includes(role)) {
-    return res.status(400).json({ error: "Invalid role. Allowed values: 'user', 'admin'" });
+  if (!["user", "admin", "superadmin"].includes(role)) { // เพิ่ม superadmin เผื่อไว้
+    return res.status(400).json({ error: "Invalid role" });
   }
 
   try {
