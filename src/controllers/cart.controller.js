@@ -1,10 +1,9 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
-// --- 1. ดูสินค้าในตะกร้า (Get Cart) ---
+// ดึงตะกร้าสินค้า
 exports.getCart = async (req, res) => {
   const { user_id } = req.params;
-
   try {
     const cartItems = await prisma.orderItem.findMany({
       where: {
@@ -13,14 +12,7 @@ exports.getCart = async (req, res) => {
         order_id: null
       },
       include: {
-        product: {
-          select: {
-            product_name: true,
-            price: true,
-            product_image: true,
-            stock: true
-          }
-        }
+        product: true
       }
     });
 
@@ -30,7 +22,7 @@ exports.getCart = async (req, res) => {
         ...item.product,
         product_image: item.product.product_image 
           ? `${req.protocol}://${req.get("host")}/images/${item.product.product_image}` 
-          : null
+          : "https://placehold.co/100"
       }
     }));
 
@@ -40,16 +32,16 @@ exports.getCart = async (req, res) => {
   }
 };
 
-// --- 2. หยิบของใส่ตะกร้า (Add to Cart) ---
+// เพิ่มสินค้าลงตะกร้า (แก้ไขแล้ว)
 exports.addToCart = async (req, res) => {
   const { user_id, product_id, quantity } = req.body;
 
-  // ✅ 1. เพิ่มการตรวจสอบค่าว่าง (Validation)
   if (!user_id || !product_id || !quantity) {
     return res.status(400).json({ error: "ข้อมูลไม่ครบถ้วน (user_id, product_id, quantity)" });
   }
 
   try {
+    // 1. เช็คสินค้าในตะกร้า (เฉพาะที่ยังไม่ได้จ่ายเงิน)
     const existingItem = await prisma.orderItem.findFirst({
       where: {
         user_id: user_id,
@@ -60,18 +52,18 @@ exports.addToCart = async (req, res) => {
     });
 
     if (existingItem) {
+      // 2. ถ้ามีในตะกร้าแล้ว ให้บวกเพิ่ม
       const updatedItem = await prisma.orderItem.update({
         where: { order_item_id: existingItem.order_item_id },
         data: { quantity: existingItem.quantity + parseInt(quantity) }
       });
-      res.json({ message: "Updated quantity in cart", item: updatedItem });
+      res.json({ message: "Updated quantity", item: updatedItem });
     } else {
-      // ค้นหาสินค้า
+      // 3. ถ้ายังไม่มีในตะกร้า ให้สร้างใหม่
       const product = await prisma.product.findUnique({ where: { product_id } });
       
-      // ✅ 2. เพิ่มการป้องกัน Error 500: ถ้าหาสินค้าไม่เจอ ให้แจ้งกลับไปดีๆ ไม่ใช่ปล่อยให้ Server พัง
       if (!product) {
-        return res.status(404).json({ error: "ไม่พบสินค้านี้ในระบบ (Product Not Found)" });
+        return res.status(404).json({ error: "ไม่พบสินค้า" });
       }
       
       const newItem = await prisma.orderItem.create({
@@ -79,23 +71,22 @@ exports.addToCart = async (req, res) => {
           user_id: user_id,
           product_id: product_id,
           quantity: parseInt(quantity),
-          price: product.price, // จุดที่เคย Error คือตรงนี้ (ถ้า product เป็น null จะดึง price ไม่ได้)
+          price: product.price,
           status: "IN_CART"
         }
       });
       res.json({ message: "Added to cart", item: newItem });
     }
   } catch (error) {
-    console.error("Add to Cart Error:", error); // Log Error ดูใน Terminal ฝั่ง Server
-    res.status(500).json({ error: error.message });
+    console.error("Add to cart error:", error);
+    res.status(500).json({ error: "ไม่สามารถเพิ่มสินค้าลงตะกร้าได้: " + error.message });
   }
 };
 
-// --- 3. แก้ไขจำนวนสินค้า (Update Quantity) ---
+// อัปเดตจำนวน
 exports.updateCartItem = async (req, res) => {
   const { item_id } = req.params;
   const { quantity } = req.body;
-
   try {
     const updatedItem = await prisma.orderItem.update({
       where: { order_item_id: item_id },
@@ -107,15 +98,14 @@ exports.updateCartItem = async (req, res) => {
   }
 };
 
-// --- 4. ลบสินค้าออกจากตะกร้า (Remove Item) ---
+// ลบสินค้า
 exports.removeCartItem = async (req, res) => {
   const { item_id } = req.params;
-
   try {
     await prisma.orderItem.delete({
       where: { order_item_id: item_id }
     });
-    res.json({ message: "Item removed from cart" });
+    res.json({ message: "Deleted successfully" });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
