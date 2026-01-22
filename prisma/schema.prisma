@@ -1,4 +1,5 @@
-// ส่วนหัวที่จำเป็น
+// prisma/schema.prisma
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,7 +10,7 @@ datasource db {
 }
 
 // ------------------------------------
-// โมเดลสำหรับร้านขายอุปกรณ์ไอที (Update: Admin Role added)
+// โมเดลสำหรับร้านขายอุปกรณ์ไอที
 // ------------------------------------
 
 model User {
@@ -19,7 +20,7 @@ model User {
   password   String
   picture    String?
   
-  // ✅ เพิ่มบรรทัดนี้: เพื่อกำหนดสิทธิ์ผู้ใช้ (ค่าปกติคือ "user")
+  // กำหนดสิทธิ์ผู้ใช้ (ค่าปกติคือ "user")
   role       String   @default("user") 
   
   created_at DateTime @default(now())
@@ -49,42 +50,39 @@ model Product {
   reviews             Review[]
 }
 
-// สถานะของ Order และ OrderItem
 enum OrderStatus {
-  IN_CART     // อยู่ในตะกร้า (ยังไม่กดสั่ง)
-  PENDING     // กดสั่งแล้ว รอชำระเงิน/รอตรวจสอบ
-  PAID        // ชำระเงินแล้ว/ยืนยันแล้ว
+  IN_CART     // อยู่ในตะกร้า
+  PENDING     // รอชำระเงิน/รอตรวจสอบ
+  PAID        // ชำระเงินแล้ว
   SHIPPED     // จัดส่งแล้ว
-  COMPLETED   // สำเร็จ (ลูกค้ารับของแล้ว)
+  COMPLETED   // สำเร็จ
   CANCELLED   // ยกเลิก
 }
 
-// โมเดลใบสั่งซื้อ (Header)
 model Order {
   order_id     String      @id @default(auto()) @map("_id") @db.ObjectId
   user_id      String      @db.ObjectId
   
-  total_price  Float       // ราคารวมของออเดอร์นี้
-  slip_image   String?     // รูปสลิปโอนเงิน
-  address      String?     // ที่อยู่จัดส่ง
+  total_price  Float       
+  slip_image   String?     
+  address      String?     
   status       OrderStatus @default(PENDING)
   
   created_at   DateTime    @default(now())
   updated_at   DateTime    @updatedAt
 
   user         User        @relation(fields: [user_id], references: [user_id])
-  orderItems   OrderItem[] // รายการสินค้าในออเดอร์นี้
+  orderItems   OrderItem[] 
 }
 
-// รายการสินค้า (ใช้ทั้งเป็นตะกร้า และ รายการในบิล)
 model OrderItem {
   order_item_id String      @id @default(auto()) @map("_id") @db.ObjectId
   user_id       String      @db.ObjectId
   product_id    String      @db.ObjectId
-  order_id      String?     @db.ObjectId // เชื่อมกับใบสั่งซื้อ (ถ้าเป็น null คืออยู่ในตะกร้า)
+  order_id      String?     @db.ObjectId 
   
   quantity      Int         @default(1)
-  price         Float?      // บันทึกราคา ณ ตอนที่สั่งซื้อ
+  price         Float?      
   status        OrderStatus @default(IN_CART)
   
   add_date      DateTime    @default(now())
@@ -93,9 +91,10 @@ model OrderItem {
   user    User    @relation(fields: [user_id], references: [user_id])
   product Product @relation(fields: [product_id], references: [product_id])
   order   Order?  @relation(fields: [order_id], references: [order_id])
+  
+  // ⚠️ สำคัญ: ต้องไม่มีบรรทัด @@unique([user_id, product_id]) ตรงนี้
 }
 
-// ตารางเชื่อม Many-to-Many ระหว่าง Product และ Category
 model ProductCategory {
   id          String   @id @default(auto()) @map("_id") @db.ObjectId
   product_id  String   @db.ObjectId
