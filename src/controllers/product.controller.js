@@ -4,10 +4,14 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 
-// --- 1. Config Multer ---
+// --- Config Multer ---
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, "images/");
+    const dir = "images/";
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir);
+    }
+    cb(null, dir);
   },
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
@@ -19,31 +23,23 @@ const upload = multer({ storage: storage }).fields([
   { name: "product_image", maxCount: 1 },
 ]);
 
-// Helper: แปลง Categories
+// Helper
 const parseCategories = (categories) => {
   if (!categories) return [];
   if (Array.isArray(categories)) return categories;
   return categories.split(",");
 };
 
-// --- 2. Get All Products ---
+// --- Controller Methods ---
+
 exports.get = async (req, res) => {
   try {
     const products = await prisma.product.findMany({
       include: {
-        categories: {
-          include: {
-            category: true,
-          },
-        },
-        reviews: {
-          include: {
-            user: true,
-          },
-        },
+        categories: { include: { category: true } },
+        reviews: { include: { user: true } },
       },
     });
-
     const productsWithUrls = products.map((product) => ({
       ...product,
       product_image: product.product_image
@@ -55,42 +51,27 @@ exports.get = async (req, res) => {
         user: {
           ...review.user,
           pictureUrl: review.user.picture
-             ? `${req.protocol}://${req.get("host")}/userpictures/${review.user.picture}`
-             : null
+            ? `${req.protocol}://${req.get("host")}/userpictures/${review.user.picture}`
+            : null,
         },
       })),
     }));
-
     res.json(productsWithUrls);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
-// --- 3. Get Product By ID ---
 exports.getById = async (req, res) => {
-  const { id } = req.params; 
-  // ⚠️ แก้ไข: ลบ parseInt ออก เพราะ MongoDB ID เป็น String
-  
+  const { id } = req.params;
   try {
     const product = await prisma.product.findUnique({
-      where: { product_id: id }, // ใช้ id ตรงๆ
+      where: { product_id: id },
       include: {
-        categories: {
-          include: {
-            category: true,
-          },
-        },
+        categories: { include: { category: true } },
         reviews: {
           include: {
-            user: {
-              select: {
-                user_id: true,
-                username: true,
-                email: true,
-                picture: true,
-              },
-            },
+            user: { select: { user_id: true, username: true, email: true, picture: true } },
           },
         },
       },
@@ -113,7 +94,6 @@ exports.getById = async (req, res) => {
           },
         })),
       };
-
       res.json(productWithUrl);
     } else {
       res.status(404).json({ error: "Product not found" });
@@ -123,16 +103,43 @@ exports.getById = async (req, res) => {
   }
 };
 
-// --- 4. Create Product ---
+exports.searchProducts = async (req, res) => {
+  const { product_name, brand, price } = req.query;
+  try {
+    const filters = [];
+    if (product_name && product_name !== "default") {
+      filters.push({ product_name: { contains: product_name, mode: 'insensitive' } });
+    }
+    if (brand && brand !== "default") {
+      filters.push({ brand: { contains: brand, mode: 'insensitive' } });
+    }
+    if (price && price !== "default") {
+      filters.push({ price: { lte: parseFloat(price) } });
+    }
+
+    const products = await prisma.product.findMany({
+      where: { AND: filters.length > 0 ? filters : undefined },
+      orderBy: { product_name: "asc" },
+    });
+
+    const productsWithUrls = products.map((product) => ({
+      ...product,
+      product_image: product.product_image
+        ? `${req.protocol}://${req.get("host")}/images/${product.product_image}`
+        : null,
+    }));
+    res.json(productsWithUrls);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 exports.create = async (req, res) => {
   upload(req, res, async (err) => {
-    if (err) {
-      return res.status(400).json({ error: err.message });
-    }
+    if (err) return res.status(400).json({ error: err.message });
 
     const { product_name, brand, price, stock, description, specifications, categories } = req.body;
     const product_image = req.files && req.files["product_image"] ? req.files["product_image"][0].filename : null;
-
     const category_ids = parseCategories(categories);
 
     try {
@@ -140,155 +147,83 @@ exports.create = async (req, res) => {
         data: {
           product_name,
           brand,
-          price: parseFloat(price),      // Price เป็น Float ถูกแล้ว
-          stock: parseInt(stock || 0),   // Stock เป็น Int ถูกแล้ว
+          price: parseFloat(price),
+          stock: parseInt(stock || 0),
           description,
           specifications,
           product_image,
           categories: {
-            create: category_ids.map((id) => ({ 
-                // ⚠️ แก้ไข: ลบ parseInt ที่ id ออก
-                category: { connect: { category_id: id } } 
-            })),
+            create: category_ids.map((id) => ({ category: { connect: { category_id: id } } })),
           },
         },
       });
-
-      res.status(201).json({ 
-          message: "Created successfully", 
-          _id: product.product_id 
-      });
+      res.status(201).json({ message: "Created successfully", _id: product.product_id });
     } catch (error) {
-      console.error(error);
       res.status(500).json({ error: error.message });
     }
   });
 };
 
-// --- 5. Update Product ---
 exports.update = async (req, res) => {
   upload(req, res, async (err) => {
-    if (err) {
-      return res.status(400).json({ error: err.message });
-    }
+    if (err) return res.status(400).json({ error: err.message });
 
-    const { id } = req.params; // ⚠️ แก้ไข: ลบ parseInt ออก
+    const { id } = req.params;
     const { product_name, brand, price, stock, description, specifications, categories } = req.body;
     const product_image = req.files && req.files["product_image"] ? req.files["product_image"][0].filename : undefined;
-
     const category_ids = parseCategories(categories);
 
     try {
-      const updateData = {
-        product_name,
-        brand,
-        description,
-        specifications,
-      };
-
+      const updateData = { product_name, brand, description, specifications };
       if (price) updateData.price = parseFloat(price);
       if (stock) updateData.stock = parseInt(stock);
       if (product_image) updateData.product_image = product_image;
 
       if (category_ids.length > 0) {
+        await prisma.productCategory.deleteMany({ where: { product_id: id } });
         updateData.categories = {
-            deleteMany: {}, 
-            create: category_ids.map((cid) => ({ 
-                // ⚠️ แก้ไข: ลบ parseInt ออก
-                category: { connect: { category_id: cid } } 
-            })),
+          create: category_ids.map((cid) => ({ category: { connect: { category_id: cid } } })),
         };
       }
 
       const product = await prisma.product.update({
-        where: { product_id: id }, // ใช้ id ตรงๆ
+        where: { product_id: id },
         data: updateData,
       });
-
       res.json({ message: "Updated", product });
     } catch (error) {
-      console.error(error);
       res.status(500).json({ error: error.message });
     }
   });
 };
 
-// --- 6. Search Products ---
-exports.searchProducts = async (req, res) => {
-  const { product_name, brand, price } = req.query;
-
-  try {
-    const filters = [];
-
-    if (product_name && product_name !== "default" && product_name.trim() !== "") {
-      filters.push({
-        product_name: { contains: product_name, mode: 'insensitive' },
-      });
-    }
-
-    if (brand && brand !== "default" && brand.trim() !== "") {
-      filters.push({
-        brand: { contains: brand, mode: 'insensitive' },
-      });
-    }
-
-    if (price && price !== "default") {
-      filters.push({
-        price: { lte: parseFloat(price) },
-      });
-    }
-
-    const products = await prisma.product.findMany({
-      where: {
-        AND: filters.length > 0 ? filters : undefined,
-      },
-      orderBy: {
-        product_name: "asc",
-      },
-    });
-
-    const productsWithUrls = products.map((product) => ({
-        ...product,
-        product_image: product.product_image
-          ? `${req.protocol}://${req.get("host")}/images/${product.product_image}`
-          : null,
-      }));
-
-    res.json(productsWithUrls);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-
-// --- 7. Delete Product ---
 exports.delete = async (req, res) => {
-  const { id } = req.params; // ⚠️ แก้ไข: ลบ parseInt ออก
-
+  const { id } = req.params;
   try {
-    // ลบ Review
-    await prisma.review.deleteMany({
-      where: { product_id: id },
-    });
+    try { await prisma.cartItem.deleteMany({ where: { product_id: id } }); } catch (e) {}
+    try { await prisma.orderItem.deleteMany({ where: { product_id: id } }); } catch (e) {}
+    try { await prisma.review.deleteMany({ where: { product_id: id } }); } catch (e) {}
+    try { await prisma.productCategory.deleteMany({ where: { product_id: id } }); } catch (e) {}
 
-    // ลบ Category Relation
-    await prisma.productCategory.deleteMany({
-        where: { product_id: id },
-    });
+    const product = await prisma.product.findUnique({ where: { product_id: id } });
+    if (product && product.product_image) {
+      const imagePath = path.join("images", product.product_image);
+      if (fs.existsSync(imagePath)) {
+        fs.unlinkSync(imagePath);
+      }
+    }
 
-    // ลบ Product
-    const product = await prisma.product.delete({
-      where: { product_id: id },
-    });
-
+    await prisma.product.delete({ where: { product_id: id } });
     res.json({ message: "Product deleted successfully" });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("Delete Error:", error);
+    res.status(500).json({ error: error.message || "Cannot delete product" });
   }
 };
 
-// --- 8. Get Top Products ---
+// ✅ ฟังก์ชันที่เคยหายไป (ต้องมีฟังก์ชันนี้ ไม่งั้น Error!)
 exports.getTopProducts = async (req, res) => {
-  const { limit } = req.query; // limit เป็นตัวเลขได้
+  const { limit } = req.query;
   try {
     const topProducts = await prisma.product.findMany({
       orderBy: [
@@ -297,14 +232,13 @@ exports.getTopProducts = async (req, res) => {
       ],
       take: parseInt(limit) || 10,
     });
-    
-    // Map URL
+
     const productsWithUrls = topProducts.map((product) => ({
-        ...product,
-        product_image: product.product_image
-          ? `${req.protocol}://${req.get("host")}/images/${product.product_image}`
-          : null,
-      }));
+      ...product,
+      product_image: product.product_image
+        ? `${req.protocol}://${req.get("host")}/images/${product.product_image}`
+        : null,
+    }));
 
     res.json(productsWithUrls);
   } catch (error) {
@@ -312,7 +246,6 @@ exports.getTopProducts = async (req, res) => {
   }
 };
 
-// --- 9. Get Top Rating Products ---
 exports.getTopRatingProducts = async (req, res) => {
   const { limit } = req.query;
   try {
@@ -325,25 +258,22 @@ exports.getTopRatingProducts = async (req, res) => {
     });
 
     const productsWithUrls = topProducts.map((product) => ({
-        ...product,
-        product_image: product.product_image
-          ? `${req.protocol}://${req.get("host")}/images/${product.product_image}`
-          : null,
-      }));
-      
+      ...product,
+      product_image: product.product_image
+        ? `${req.protocol}://${req.get("host")}/images/${product.product_image}`
+        : null,
+    }));
+
     res.json(productsWithUrls);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
-// --- 10. Add Review ---
 exports.addReview = async (req, res) => {
   const { product_id, user_id, rating, comment } = req.body;
   const ratingInt = parseInt(rating, 10);
-  
-  // ⚠️ แก้ไข: ไม่ต้อง parseInt(product_id) และ user_id
-  const pId = product_id; 
+  const pId = product_id;
   const uId = user_id;
 
   if (isNaN(ratingInt) || ratingInt < 1 || ratingInt > 5) {
@@ -361,7 +291,6 @@ exports.addReview = async (req, res) => {
       include: { user: true },
     });
 
-    // Update rating
     await prisma.product.update({
       where: { product_id: pId },
       data: {
@@ -386,15 +315,12 @@ async function calculateAverageRating(product_id) {
   return parseFloat(avg.toFixed(1));
 }
 
-// --- 11. Increment Added List ---
 exports.incrementAddedToListCount = async (req, res) => {
-  const { id } = req.params; // ⚠️ แก้ไข: ลบ parseInt ออก
+  const { id } = req.params;
   try {
     const product = await prisma.product.update({
       where: { product_id: id },
-      data: {
-        added_to_list_count: { increment: 1 },
-      },
+      data: { added_to_list_count: { increment: 1 } },
     });
     res.json(product);
   } catch (error) {
